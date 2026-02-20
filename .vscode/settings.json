@@ -1,0 +1,97 @@
+{
+    "// ─── COPILOT CONFIGURATION ───": "",
+    "github.copilot.chat.commitMessageGeneration.instructions": [
+        {
+            "file": ".github/instructions/git-commit.instructions.md"
+        }
+    ],
+    "github.copilot.chat.reviewSelection.enabled": true,
+    "github.copilot.chat.reviewSelection.instructions": [
+        {
+            "file": ".github/instructions/dotnet-api.instructions.md"
+        },
+        {
+            "file": ".github/instructions/xunit-testing.instructions.md"
+        },
+        {
+            "file": ".github/instructions/jest-vitest-testing.instructions.md"
+        }
+    ],
+    "github.copilot.chat.testGeneration.instructions": [
+        {
+            "file": ".github/instructions/xunit-testing.instructions.md"
+        },
+        {
+            "file": ".github/instructions/jest-vitest-testing.instructions.md"
+        }
+    ],
+    "github.copilot.chat.codeGeneration.instructions": [
+        {
+            "file": ".specify/memory/constitution.md"
+        }
+    ],
+    "// ─── EDITOR FORMATTING ───": "",
+    "editor.formatOnSave": true,
+    "editor.formatOnPaste": false,
+    "editor.defaultFormatter": null,
+    "editor.codeActionsOnSave": {
+        "source.fixAll": "explicit",
+        "source.organizeImports": "explicit"
+    },
+    "// ─── FILE SETTINGS ───": "",
+    "files.eol": "\n",
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "files.trimFinalNewlines": true,
+    "// ─── TYPESCRIPT / JAVASCRIPT ───": "",
+    "typescript.preferences.importModuleSpecifier": "relative",
+    "typescript.preferences.quoteStyle": "single",
+    "typescript.suggest.autoImports": true,
+    "javascript.preferences.quoteStyle": "single",
+    "// ─── C# ───": "",
+    "dotnet.defaultSolution": "disable",
+    "[csharp]": {
+        "editor.defaultFormatter": "ms-dotnettools.csharp",
+        "editor.formatOnSave": true
+    },
+    "// ─── JSON ───": "",
+    "[json]": {
+        "editor.defaultFormatter": "vscode.json-language-features",
+        "editor.tabSize": 2
+    },
+    "[jsonc]": {
+        "editor.defaultFormatter": "vscode.json-language-features",
+        "editor.tabSize": 2
+    },
+    "// ─── YAML ───": "",
+    "[yaml]": {
+        "editor.tabSize": 2
+    },
+    "// ─── MARKDOWN ───": "",
+    "[markdown]": {
+        "editor.wordWrap": "on",
+        "editor.trimAutoWhitespace": false,
+        "files.trimTrailingWhitespace": false
+    },
+    "// ─── HTML ───": "",
+    "[html]": {
+        "editor.defaultFormatter": "vscode.html-language-features",
+        "editor.tabSize": 2
+    },
+    "// ─── SEARCH EXCLUSIONS ───": "",
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/bin": true,
+        "**/obj": true,
+        "**/dist": true,
+        "**/coverage": true,
+        "**/.angular": true
+    },
+    "// ─── FILE EXCLUSIONS ───": "",
+    "files.exclude": {
+        "**/.git": true,
+        "**/node_modules": true,
+        "**/bin": true,
+        "**/obj": true
+    }
+}
