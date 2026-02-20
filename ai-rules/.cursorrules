@@ -1,0 +1,110 @@
+# Cursor AI Rules — Full-Stack .NET Organization
+
+## Governing Document
+
+Read `.specify/memory/constitution.md` for complete architectural standards and coding rules.
+That file is the single source of truth. When in doubt, the constitution wins.
+
+## Tech Stack
+
+- Backend: ASP.NET Core 8/9+, C# 12+, Entity Framework Core
+- Frontend: Angular 18+ OR React 18+ (check project for which one)
+- Database: PostgreSQL (default) or SQL Server (check appsettings.json)
+- Auth: Azure Entra ID with OAuth 2.0 via Microsoft.Identity.Web
+- API Docs: Scalar + OpenAPI (NOT Swagger UI)
+- Testing: xUnit + NSubstitute (backend), Jest/Vitest + Testing Library (frontend)
+- CI/CD: Azure DevOps Pipelines (YAML)
+- Deployment: Docker on Azure Kubernetes Service (AKS) with KEDA
+
+## C# Rules
+
+1. async/await for ALL I/O — never .Result or .Wait()
+2. Dependency injection via primary constructors — never new up services
+3. Use sealed on classes, record for DTOs and value objects
+4. Nullable reference types enabled — handle nullability correctly
+5. ILogger<T> for structured logging — never Console.WriteLine
+6. [Authorize] at controller level by default, [AllowAnonymous] explicitly
+7. [ProducesResponseType] on all API actions for Scalar documentation
+8. CancellationToken as last parameter on all async methods
+9. ProblemDetails (RFC 7807) for all error responses
+10. Options pattern (IOptions<T>) for configuration — never read IConfiguration directly
+
+## Entity Framework Core Rules
+
+1. Use AddDbContextFactory — NEVER AddDbContext
+2. Inject IDbContextFactory<T> — NEVER inject DbContext directly
+3. Create DbContext per operation: await using var db = await factory.CreateDbContextAsync(ct)
+4. AsNoTracking() for all read-only queries
+5. Select() projection to fetch only needed columns
+6. Pagination (Skip/Take) for all list queries
+7. IEntityTypeConfiguration<T> for entity config — never configure in OnModelCreating
+8. PostgreSQL: snake_case names, gen_random_uuid(), CURRENT_TIMESTAMP, jsonb
+9. SQL Server: PascalCase names, NEWSEQUENTIALID(), GETUTCDATE(), nvarchar
+
+## Angular Rules (if project uses Angular)
+
+1. Standalone components only — never NgModules
+2. Signals for state management
+3. inject() function — never constructor injection
+4. ChangeDetectionStrategy.OnPush on all components
+5. @for, @if, @switch template syntax — never *ngIf, *ngFor
+6. Lazy-load feature routes with loadComponent
+7. MsalGuard for route protection, MsalInterceptor for token injection
+8. Strict TypeScript — no any types
+
+## React Rules (if project uses React)
+
+1. Functional components only — never class components
+2. React Query (TanStack Query) for all server state
+3. Zustand for client-only state (if needed, never Redux for new projects)
+4. Named exports only — never default exports
+5. Custom hooks to encapsulate reusable business logic
+6. React.lazy + Suspense for route code splitting
+7. MsalProvider + MsalAuthenticationTemplate for auth
+8. Strict TypeScript — no any types
+
+## Testing Rules
+
+### Backend (xUnit)
+
+1. Naming: MethodName_Should_ExpectedBehavior_When_Condition
+2. Arrange-Act-Assert (AAA) pattern with comment markers
+3. NSubstitute for mocking (Substitute.For<T>())
+4. [Fact] for single-case, [Theory] with [InlineData] for parameterized
+5. WebApplicationFactory + Testcontainers for integration tests
+6. TestAuthHandler to bypass Entra ID in integration tests
+7. 80% minimum coverage for business logic
+
+### Frontend (Jest/Vitest)
+
+1. Testing Library query priority: getByRole > getByLabelText > getByText > getByTestId
+2. userEvent for interactions — never fireEvent
+3. waitFor for async assertions
+4. Mock all HTTP calls — never hit real APIs
+5. Test all states: loading, success, error, empty
+6. 70% minimum coverage for components with business logic
+
+## Security Rules
+
+1. NEVER hardcode secrets, connection strings, or API keys
+2. NEVER use string interpolation in raw SQL queries
+3. Always validate and sanitize user input
+4. CORS with explicit origins — never wildcards in production
+5. Rate limiting on public-facing APIs
+6. Azure Key Vault for secrets in deployed environments
+7. User Secrets (dotnet user-secrets) for local development
+
+## Git Rules
+
+1. Conventional commits: feat:, fix:, chore:, docs:, test:, refactor:, perf:, ci:
+2. Imperative mood in subject line: "add feature" not "added feature"
+3. Max 72 characters for subject line
+4. Reference Azure DevOps work items: AB#12345
+
+## File References
+
+When generating code, check these for patterns and context:
+- .specify/memory/constitution.md — Architecture decisions and standards
+- .github/instructions/ — Detailed patterns for each technology
+- .editorconfig — Code formatting rules
+- Existing code in the project — Follow established patterns
