@@ -461,6 +461,45 @@ Common extensions to enable:
 
 ---
 
+---
+
+## Database-First with PostgreSQL
+
+### Scaffold from Existing PostgreSQL Database
+
+    dotnet ef dbcontext scaffold "Host=localhost;Port=5432;Database=myapp;Username=postgres;Password=secret" Npgsql.EntityFrameworkCore.PostgreSQL --project src/MyApp.Infrastructure --startup-project src/MyApp.Api --context AppDbContext --context-dir Data --output-dir Entities --force --no-onconfiguring
+
+### PostgreSQL-Specific Scaffold Notes
+
+1. PostgreSQL snake_case names are automatically mapped to PascalCase C# properties
+2. PostgreSQL arrays (text[], integer[]) are mapped to C# arrays
+3. PostgreSQL jsonb columns are mapped to string by default — use partial classes to add typed access
+4. PostgreSQL enums are mapped to string by default
+5. PostgreSQL uuid columns are mapped to Guid
+6. PostgreSQL timestamptz columns are mapped to DateTimeOffset
+
+### Managing Schema Changes (Database-First)
+
+Since migrations are not used in database-first, schema changes are managed via:
+
+1. **SQL migration scripts** — versioned SQL files applied by DBA or CI/CD pipeline
+2. **Database comparison tools** — Azure Data Studio, pgAdmin, or dbForge
+3. **Flyway or Liquibase** — dedicated database migration tools
+4. **Azure DevOps pipeline task** — execute SQL scripts as deployment step
+
+Example SQL migration script:
+
+    -- V001__add_user_status_column.sql
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS status varchar(50) NOT NULL DEFAULT 'active';
+
+    CREATE INDEX IF NOT EXISTS ix_users_status
+    ON users (status);
+
+After applying the DB change, re-scaffold the entities:
+
+    dotnet ef dbcontext scaffold "connection-string" Npgsql.EntityFrameworkCore.PostgreSQL --force --no-onconfiguring --project src/MyApp.Infrastructure --startup-project src/MyApp.Api
+
 ## Rules Summary
 
 ### Connection Rules
