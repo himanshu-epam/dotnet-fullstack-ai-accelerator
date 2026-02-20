@@ -43,6 +43,194 @@ SQL Server:
                     errorNumbersToAdd: null);
             }));
 
+---
+
+## Database-First Approach
+
+When the database schema already exists and is managed externally (by DBAs or SQL scripts),
+use the database-first approach with `dotnet ef dbcontext scaffold`.
+
+### When to Use Database-First
+
+- Database schema is managed by a DBA team
+- Working with a legacy database
+- Schema is shared across multiple applications
+- Database changes go through a formal change management process
+
+### Scaffold Command (PostgreSQL)
+
+    dotnet ef dbcontext scaffold "Host=localhost;Port=5432;Database=myapp;Username=postgres;Password=secret" Npgsql.EntityFrameworkCore.PostgreSQL --project src/MyApp.Infrastructure --startup-project src/MyApp.Api --context AppDbContext --context-dir Data --output-dir Entities --force --no-onconfiguring
+
+### Scaffold Command (SQL Server)
+
+    dotnet ef dbcontext scaffold "Server=localhost,1433;Database=MyApp;User Id=sa;Password=secret;TrustServerCertificate=True" Microsoft.EntityFrameworkCore.SqlServer --project src/MyApp.Infrastructure --startup-project src/MyApp.Api --context AppDbContext --context-dir Data --output-dir Entities --force --no-onconfiguring
+
+### Scaffold Command Parameters
+
+| Parameter          | Purpose                                           |
+| ------------------ | ------------------------------------------------- |
+| --project          | Where scaffolded files are created                |
+| --startup-project  | Project with appsettings.json                     |
+| --context          | Name of the generated DbContext class             |
+| --context-dir      | Folder for DbContext class                        |
+| --output-dir       | Folder for entity classes                         |
+| --force            | Overwrite existing generated files                |
+| --no-onconfiguring | Do NOT generate OnConfiguring (we use DI instead) |
+| --tables           | Scaffold specific tables only (optional)          |
+| --schema           | Scaffold specific schema only (optional)          |
+
+### Scaffold Specific Tables Only
+
+    dotnet ef dbcontext scaffold "connection-string" Npgsql.EntityFrameworkCore.PostgreSQL --tables users --tables projects --tables user_roles --project src/MyApp.Infrastructure --startup-project src/MyApp.Api --force --no-onconfiguring
+
+### Post-Scaffold Checklist
+
+After running scaffold:
+
+1. Review generated entities — adjust property types if needed
+2. Add `sealed` modifier to all generated entity classes
+3. Add navigation property initializers (`= []` for collections, `= null!` for references)
+4. Move DbContext registration to Program.cs using AddDbContextFactory (scaffold does NOT do this)
+5. Delete OnConfiguring method from generated DbContext (if --no-onconfiguring was not used)
+6. Add DbSet properties using `=> Set<T>()` pattern if not generated
+7. DO NOT modify generated IEntityTypeConfiguration classes — they will be overwritten on re-scaffold
+
+### Partial Classes for Customization
+
+Since scaffolded files get overwritten on re-scaffold, use **partial classes** to add
+custom logic that survives re-scaffolding:
+
+    // Auto-generated (will be overwritten)
+    // Entities/User.cs
+    public partial class User
+    {
+        public Guid Id { get; set; }
+        public string Email { get; set; } = null!;
+        public string DisplayName { get; set; } = null!;
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset? UpdatedAt { get; set; }
+
+        public virtual ICollection<Project> Projects { get; set; } = new List<Project>();
+    }
+
+    // Custom extension (will NOT be overwritten)
+    // Entities/Partials/User.Partial.cs
+    public partial class User
+    {
+        /// <summary>
+        /// Returns the user's initials from the display name.
+        /// </summary>
+        public string GetInitials()
+        {
+            var parts = DisplayName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return parts.Length switch
+            {
+                0 => "?",
+                1 => parts[0][..1].ToUpperInvariant(),
+                _ => $"{parts[0][..1]}_{parts[^1][..1]}".ToUpperInvariant()
+            };
+        }
+
+        /// <summary>
+        /// Checks if the user has been updated since creation.
+        /// </summary>
+        public bool HasBeenModified => UpdatedAt is not null;
+    }
+
+### Folder Structure for Database-First
+
+    src/MyApp.Infrastructure/
+    ├── Data/
+    │   ├── AppDbContext.cs                    ← Generated (overwritten on re-scaffold)
+    │   └── AppDbContextFactory.cs             ← Manual (IDesignTimeDbContextFactory)
+    ├── Entities/
+    │   ├── User.cs                            ← Generated (overwritten on re-scaffold)
+    │   ├── Project.cs                         ← Generated (overwritten on re-scaffold)
+    │   └── Partials/
+    │       ├── User.Partial.cs                ← Manual (survives re-scaffold)
+    │       └── Project.Partial.cs             ← Manual (survives re-scaffold)
+    └── Configurations/
+        ├── UserConfiguration.cs               ← Generated (overwritten on re-scaffold)
+        └── ProjectConfiguration.cs            ← Generated (overwritten on re-scaffold)
+
+### Re-Scaffold Script
+
+Create a PowerShell script for easy re-scaffolding after DB changes:
+
+    # scaffold-db.ps1
+    param(
+        [string]$ConnectionString = "Host=localhost;Port=5432;Database=myapp;Username=postgres;Password=secret"
+    )
+
+    Write-Host "Scaffolding database..." -ForegroundColor Cyan
+
+    dotnet ef dbcontext scaffold `
+        $ConnectionString `
+        Npgsql.EntityFrameworkCore.PostgreSQL `
+        --project src/MyApp.Infrastructure `
+        --startup-project src/MyApp.Api `
+        --context AppDbContext `
+        --context-dir Data `
+        --output-dir Entities `
+        --force `
+        --no-onconfiguring
+
+    Write-Host "Scaffold complete. Review generated files." -ForegroundColor Green
+    Write-Host "Remember: Partial classes in Entities/Partials/ are preserved." -ForegroundColor Yellow
+
+### DbContext Registration (Same for Both Approaches)
+
+Whether code-first or database-first, the factory registration is identical:
+
+    builder.Services.AddDbContextFactory<AppDbContext>(options =>
+        options.UseNpgsql(
+            builder.Configuration.GetConnectionString("DefaultConnection"),
+            npgsqlOptions =>
+            {
+                npgsqlOptions.EnableRetryOnFailure(
+                    maxRetryCount: 3,
+                    maxRetryDelay: TimeSpan.FromSeconds(10),
+                    errorCodesToAdd: null);
+                npgsqlOptions.CommandTimeout(30);
+            }));
+
+### Service Pattern (Same for Both Approaches)
+
+Whether code-first or database-first, services use IDbContextFactory identically:
+
+    public sealed class UserService(
+        IDbContextFactory<AppDbContext> dbContextFactory,
+        ILogger<UserService> logger) : IUserService
+    {
+        public async Task<UserResponse?> GetByIdAsync(
+            Guid id, CancellationToken cancellationToken = default)
+        {
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+            return await dbContext.Users
+                .AsNoTracking()
+                .Where(u => u.Id == id)
+                .Select(u => new UserResponse(
+                    u.Id, u.Email, u.DisplayName, u.CreatedAt, u.UpdatedAt))
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+    }
+
+### Database-First Rules
+
+1. ALWAYS use --no-onconfiguring flag when scaffolding (use DI for configuration)
+2. ALWAYS use --force flag to overwrite previously generated files
+3. ALWAYS use partial classes for custom entity logic (survives re-scaffold)
+4. ALWAYS keep partial classes in a separate Partials/ folder
+5. ALWAYS review generated entities after re-scaffolding
+6. ALWAYS add `sealed` modifier to generated entity classes after scaffold
+7. NEVER modify generated entity files directly — they will be overwritten
+8. NEVER modify generated configuration files — they will be overwritten
+9. NEVER use EF Core migrations with database-first — schema is managed externally
+10. ALWAYS create a re-scaffold script for easy repeatable execution
+11. ALWAYS use the same IDbContextFactory pattern regardless of approach
+12. ALWAYS use the same query patterns (AsNoTracking, projection, pagination) regardless of approach
+
 ### DbContext Class
 
     public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
