@@ -1,0 +1,142 @@
+# Windsurf Rules — Full-Stack .NET Organization
+
+## Governing Document
+
+Read `.specify/memory/constitution.md` for complete standards.
+Read `.github/instructions/` for technology-specific patterns.
+These documents are the single source of truth. Always follow them.
+
+## Stack
+
+- Backend: ASP.NET Core 8/9+, C# 12+, Entity Framework Core
+- Frontend: Angular 18+ OR React 18+ (check project for which)
+- Database: PostgreSQL (default) or SQL Server
+- Auth: Azure Entra ID with OAuth 2.0 via Microsoft.Identity.Web
+- API Docs: Scalar + OpenAPI (NOT Swagger UI)
+- Testing: xUnit + NSubstitute (backend), Jest/Vitest + Testing Library (frontend)
+- CI/CD: Azure DevOps Pipelines (YAML)
+- Deployment: Docker on Azure AKS with KEDA scaling
+
+## Before Writing Any Code
+
+1. Check existing code patterns in the project — match the established style
+2. Read the constitution at .specify/memory/constitution.md
+3. Check .github/instructions/ for detailed patterns per technology
+4. Check .editorconfig for formatting rules
+
+## C# Critical Rules
+
+- async/await for ALL I/O — never .Result or .Wait()
+- Dependency injection via primary constructors — never new up services
+- sealed on all classes not designed for inheritance
+- record types for DTOs and value objects
+- Nullable reference types enabled — handle nullability
+- ILogger<T> for structured logging — never Console.WriteLine
+- Options pattern (IOptions<T>) for configuration
+- ProblemDetails (RFC 7807) for all error responses
+
+## API Endpoint Rules
+
+- [Authorize] at controller level, [AllowAnonymous] explicitly for public endpoints
+- [ProducesResponseType] for every possible status code
+- CancellationToken as the last parameter on all async methods
+- XML documentation comments on all public actions
+- [Tags] for Scalar grouping
+- Route constraints: {id:guid}
+- 201 CreatedAtAction for POST, 204 NoContent for DELETE
+- Pagination for all list endpoints
+- Input validation with FluentValidation or DataAnnotations
+
+## Entity Framework Core Rules
+
+- AddDbContextFactory — NEVER AddDbContext
+- Inject IDbContextFactory<T> — NEVER inject DbContext directly
+- Create per-operation: await using var db = await factory.CreateDbContextAsync(ct)
+- AsNoTracking() for read-only queries
+- Select() projection — fetch only needed columns
+- Pagination (Skip/Take) for all list queries
+- IEntityTypeConfiguration<T> — never configure in OnModelCreating directly
+- AsSplitQuery() for multiple collection includes
+- Task.WhenAll with separate DbContext per parallel query
+- ExecuteUpdateAsync/ExecuteDeleteAsync for bulk operations
+
+## Database Conventions
+
+PostgreSQL (default):
+- snake_case for tables and columns
+- gen_random_uuid() for UUIDs
+- CURRENT_TIMESTAMP for defaults
+- jsonb for JSON, timestamptz for timestamps
+
+SQL Server:
+- PascalCase for tables and columns
+- NEWSEQUENTIALID() for GUIDs
+- GETUTCDATE() for defaults
+- datetime2 for timestamps, nvarchar for strings
+
+## Authentication Rules
+
+Backend:
+- Azure Entra ID via Microsoft.Identity.Web — never custom auth
+- [Authorize] default, [AllowAnonymous] explicit
+- Policy-based authorization: RequireAdmin, RequireUser, RequireReadAccess
+- ClaimsPrincipalExtensions for user info extraction
+- TestAuthHandler for integration test auth bypass
+
+Angular:
+- @azure/msal-angular with MsalInterceptor and MsalGuard
+- Standalone components, signals, inject(), OnPush
+- @for/@if template syntax — never *ngIf/*ngFor
+
+React:
+- @azure/msal-react with MsalProvider and MsalAuthenticationTemplate
+- useAuth hook for user info and roles
+- Functional components, React Query, named exports
+- Custom hooks for reusable business logic
+
+## Testing Rules
+
+Backend (xUnit):
+- MethodName_Should_ExpectedBehavior_When_Condition
+- Arrange-Act-Assert (AAA) with comment markers
+- NSubstitute for mocking
+- [Fact] for single-case, [Theory] + [InlineData] for parameterized
+- WebApplicationFactory + Testcontainers for integration
+- 80% minimum coverage for business logic
+
+Frontend (Jest/Vitest):
+- Testing Library: getByRole > getByLabelText > getByText > getByTestId
+- userEvent — never fireEvent
+- waitFor for async assertions
+- Mock all HTTP calls and auth
+- Test loading, success, error, empty states
+- 70% minimum coverage for components with logic
+
+## Security — Non-Negotiable
+
+- NEVER hardcode secrets in code or config files
+- NEVER use string interpolation in raw SQL
+- NEVER use wildcard CORS origins in production
+- Always validate user input on every endpoint
+- Azure Key Vault for production secrets
+- User Secrets for local development secrets
+- Rate limiting on public-facing APIs
+- HTTPS in all environments
+
+## Deployment Rules
+
+- Docker multi-stage builds with Alpine images
+- Run containers as non-root user
+- AKS with resource limits, health probes, network policies
+- KEDA for autoscaling
+- Image tags with Build.BuildId — never latest in production
+- External Secrets Operator for Key Vault integration
+- Pod Disruption Budget for production availability
+
+## Git Rules
+
+- Conventional commits: feat:, fix:, chore:, docs:, test:, refactor:, perf:, ci:
+- Imperative mood: "add feature" not "added feature"
+- Max 72 characters for subject line
+- Explain WHY in body, not WHAT
+- Reference work items: AB#12345
