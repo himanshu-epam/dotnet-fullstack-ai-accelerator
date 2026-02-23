@@ -1,151 +1,520 @@
 ---
 agent: agent
-description: "Generate comprehensive xUnit unit tests for a C# class following org standards"
+description: "Generate unit tests for backend (.NET/xUnit) or frontend (Jest/Vitest) code"
 ---
 
 # Create Unit Tests
 
-Generate comprehensive xUnit unit tests for the selected class or the class described below.
-Follow ALL standards from `.specify/memory/constitution.md` and `.github/instructions/xunit-testing.instructions.md`.
+You are helping the developer generate comprehensive unit tests.
+Follow the organization's constitution at `.specify/memory/constitution.md` — specifically
+Section 5 (Testing Standards) and Section 7 (Code Quality).
 
-## Target
+## Inputs
 
-- **Class to test**: ${input:className:What class do you want to test? (e.g., UserService, CreateUserRequestValidator)}
-- **Test type**: ${input:testType:What type of tests? (unit, integration, both):unit}
+- **Target File**: ${input:targetFile:Path to the file you want to test (e.g., Services/ProductService.cs or components/ProductList.tsx)}
+- **Test Framework**: ${input:framework:xunit|jest|vitest}
+- **Coverage Goal**: ${input:coverageGoal:80}
 
-## Instructions
+## Step 1 — Backend Unit Tests (xUnit)
 
-### Analyze the Target Class
+Use this step when the target file is a C# class (.cs file).
 
-1. Read the selected class or find the class by name in the workspace
-2. Identify ALL public methods
-3. Identify constructor dependencies (these become mocks)
-4. Identify return types, parameters, and possible outcomes for each method
-5. Identify validation logic, branching paths, and error scenarios
+### Test File Location
 
-### Generate Test Class Structure
-
-Create a test class following this pattern:
-
+- Place tests in the corresponding test project under the matching folder structure
 - File name: `{ClassName}Tests.cs`
-- Class name: `{ClassName}Tests`
-- Use `sealed` modifier on the test class
-- Name the system under test `_sut`
-- Create private fields for all mocked dependencies
-- Initialize `_sut` and all mocks in the constructor
-- Use NSubstitute for all interface mocking: `Substitute.For<T>()`
+- Example: `src/MyApp.Application/Services/ProductService.cs`
+  maps to `tests/MyApp.Tests.Unit/Services/ProductServiceTests.cs`
 
-### Generate Tests for Each Public Method
+### Test Class Structure Rules
 
-For each public method, generate tests covering:
+- Test class MUST be `public sealed class`
+- Use constructor injection for shared setup (xUnit creates a new instance per test)
+- Use `IClassFixture<T>` only for expensive shared state
+- Group tests logically using `#region` or nested classes
+- Add XML doc comments on the test class describing what is being tested
 
-**Happy Path Tests**:
+### Test Method Naming Convention
 
-- Method succeeds with valid input
-- Method returns expected data type and values
-- Method calls expected dependencies
+    MethodName_Should_ExpectedBehavior_When_Condition
 
-**Not Found / Null Tests**:
+Examples:
 
-- Method receives ID that does not exist → returns null or appropriate response
-- Method receives null parameters → throws or handles gracefully
+- `GetById_Should_ReturnProduct_When_ProductExists`
+- `Create_Should_ThrowValidationException_When_NameIsEmpty`
+- `Delete_Should_ReturnFalse_When_ProductNotFound`
 
-**Validation / Error Tests**:
+### Test Body Pattern (AAA)
 
-- Method receives invalid input (empty strings, invalid formats, out of range values)
-- Method receives duplicate data (unique constraint violations)
-- Method encounters expected business rule failures
+Every test MUST follow Arrange-Act-Assert with comment markers:
 
-**Edge Case Tests**:
+    [Fact]
+    public async Task GetById_Should_ReturnProduct_When_ProductExists()
+    {
+        // Arrange
+        var productId = Guid.NewGuid();
+        var expected = new Product { Id = productId, Name = "Test" };
+        _repository.GetByIdAsync(productId).Returns(expected);
 
-- Method receives boundary values (max length strings, zero, negative numbers)
-- Method receives empty collections
-- Method handles concurrent scenarios (if applicable)
+        // Act
+        var result = await _sut.GetByIdAsync(productId);
 
-### Test Method Requirements
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(expected.Name, result.Name);
+    }
 
-For EVERY test method:
+### Mocking Rules
 
-1. Name: `MethodName_Should_ExpectedBehavior_When_Condition`
-2. Use `[Fact]` for single-case tests
-3. Use `[Theory]` with `[InlineData]` for parameterized tests (invalid inputs, boundary values)
-4. Use `[Theory]` with `[MemberData]` for complex test data
-5. Use Arrange-Act-Assert (AAA) pattern with comment markers:
+- Use **NSubstitute** as the preferred mocking library
+- Mock ALL external dependencies (repositories, HTTP clients, loggers)
+- NEVER mock the class under test (the SUT)
+- Use `Arg.Any<T>()` for flexible argument matching
+- Use `Arg.Is<T>(x => x.Property == value)` for specific matching
+- Verify interactions with `Received()` and `DidNotReceive()`
 
-   // Arrange
-   (setup mocks and test data)
+### What to Test
 
-   // Act
-   (call the method under test)
+For each public method in the target class, generate tests for:
 
-   // Assert
-   (verify the result)
+1. **Happy path** — Normal input returns expected output
+2. **Null/empty input** — Null or empty parameters handled correctly
+3. **Not found** — Entity does not exist
+4. **Validation failure** — Invalid input rejected
+5. **Authorization** — Unauthorized access handled (if applicable)
+6. **Edge cases** — Boundary values, max lengths, special characters
+7. **Exception scenarios** — External dependency throws exception
 
-6. Include `CancellationToken.None` in all async method calls
-7. Make test methods `async Task` (not `async void`)
-8. One assertion concept per test (multiple Assert calls for the same concept is OK)
+### Example Test Class Pattern
 
-### Mock Setup Requirements
+    using NSubstitute;
+    using NSubstitute.ReturnsExtensions;
 
-- Use `Arg.Any<T>()` for parameters you do not care about
-- Use `Arg.Is<T>(predicate)` for condition-based matching
-- Use `.Returns()` for setting up return values
-- Use `.ThrowsAsync()` for setting up exception scenarios
-- Use `.Received(n)` to verify method calls
-- Use `.DidNotReceive()` to verify method was NOT called
-- Always include `Arg.Any<CancellationToken>()` for async mock setups
+    namespace MyApp.Tests.Unit.Services;
 
-### IDbContextFactory Mocking
+    /// <summary>
+    /// Unit tests for <see cref="ProductService"/>.
+    /// </summary>
+    public sealed class ProductServiceTests
+    {
+        private readonly IProductRepository _repository;
+        private readonly ILogger<ProductService> _logger;
+        private readonly ProductService _sut;
 
-If the class under test uses `IDbContextFactory<AppDbContext>`:
+        public ProductServiceTests()
+        {
+            _repository = Substitute.For<IProductRepository>();
+            _logger = Substitute.For<ILogger<ProductService>>();
+            _sut = new ProductService(_repository, _logger);
+        }
 
-- Mock the factory: `Substitute.For<IDbContextFactory<AppDbContext>>()`
-- For simple tests, create an in-memory DbContext or mock the DbContext
-- Setup: `factory.CreateDbContextAsync(Arg.Any<CancellationToken>()).Returns(mockDbContext)`
-- Consider using a helper method to create test DbContext with seeded data
+        [Fact]
+        public async Task GetByIdAsync_Should_ReturnProduct_When_ProductExists()
+        {
+            // Arrange
+            var productId = Guid.NewGuid();
+            var expected = new Product { Id = productId, Name = "Widget" };
+            _repository.GetByIdAsync(productId, Arg.Any<CancellationToken>())
+                .Returns(expected);
 
-### Test Data
+            // Act
+            var result = await _sut.GetByIdAsync(productId);
 
-- Use meaningful test data (not "test", "abc", or "123")
-- Use realistic emails: "alice.johnson@example.com"
-- Use realistic names: "Alice Johnson"
-- Use `Guid.NewGuid()` for IDs
-- Use `DateTimeOffset.UtcNow` for timestamps
-- Consider creating a Test Data Builder if the class has complex setup
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(expected.Id, result.Id);
+            Assert.Equal(expected.Name, result.Name);
+        }
 
-### Validator Tests (if target is a FluentValidation validator)
+        [Fact]
+        public async Task GetByIdAsync_Should_ReturnNull_When_ProductNotFound()
+        {
+            // Arrange
+            _repository.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                .ReturnsNull();
 
-Generate tests that verify:
+            // Act
+            var result = await _sut.GetByIdAsync(Guid.NewGuid());
 
-- Valid input passes validation (result.IsValid is true)
-- Each required field fails when empty
-- Each field with max length fails when exceeded
-- Each field with format requirements fails with invalid format
-- Multiple invalid fields produce multiple errors
-- Check specific error messages and property names
+            // Assert
+            Assert.Null(result);
+        }
 
-### What NOT to Generate
+        [Fact]
+        public async Task CreateAsync_Should_CallRepository_When_InputIsValid()
+        {
+            // Arrange
+            var request = new CreateProductRequest { Name = "New Widget", Price = 9.99m };
 
-- Do NOT test private methods — test through the public API
-- Do NOT test EF Core itself (generated SQL, migrations)
-- Do NOT test framework code (ASP.NET Core middleware, DI container)
-- Do NOT test third-party libraries
-- Do NOT create tests that depend on external services
+            // Act
+            await _sut.CreateAsync(request);
 
-### Output
+            // Assert
+            await _repository.Received(1).AddAsync(
+                Arg.Is<Product>(p => p.Name == "New Widget"),
+                Arg.Any<CancellationToken>()
+            );
+        }
 
-Generate a COMPLETE test file including:
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public async Task CreateAsync_Should_ThrowArgumentException_When_NameIsInvalid(string? name)
+        {
+            // Arrange
+            var request = new CreateProductRequest { Name = name!, Price = 9.99m };
 
-- All required `using` statements
-- Test class with constructor setup
-- ALL test methods (aim for at least 8-15 tests per service class)
-- Any helper methods needed (mock setup, test data builders)
+            // Act & Assert
+            await Assert.ThrowsAsync<ArgumentException>(
+                () => _sut.CreateAsync(request)
+            );
+        }
+    }
 
-Also show the NuGet packages needed if not already installed:
+## Step 2 — Frontend Unit Tests (Jest / Vitest)
 
-    xunit
-    xunit.runner.visualstudio
-    Microsoft.NET.Test.Sdk
-    NSubstitute
-    NSubstitute.Analyzers.CSharp
-    coverlet.collector
+Use this step when the target file is a TypeScript/JavaScript component (.tsx, .ts, .jsx).
+
+### Test File Location
+
+- **React**: Colocate test files next to the component
+  - `components/ProductList.tsx` → `components/ProductList.test.tsx`
+- **Angular**: Colocate test files next to the component
+  - `product-list/product-list.component.ts` → `product-list/product-list.component.spec.ts`
+
+### Test Structure Rules
+
+- Use `describe` blocks to group tests by component or feature
+- Use `it` or `test` for individual test cases
+- Use `beforeEach` for shared setup
+- Use `afterEach` with `cleanup()` to prevent test pollution
+- Prefer `userEvent` over `fireEvent` for user interactions
+
+### Testing Library Query Priority
+
+Use queries in this priority order (most accessible first):
+
+1. `getByRole` — Accessible role queries (BEST)
+2. `getByLabelText` — Form elements
+3. `getByPlaceholderText` — Input placeholders
+4. `getByText` — Visible text content
+5. `getByDisplayValue` — Current form values
+6. `getByTestId` — LAST RESORT only
+
+### What to Test
+
+For each component, generate tests for:
+
+1. **Renders correctly** — Component mounts without errors
+2. **Displays data** — Data from props/state renders in the DOM
+3. **User interactions** — Click, type, select triggers correct behavior
+4. **Loading state** — Shows loading indicator while fetching
+5. **Empty state** — Shows appropriate message when no data
+6. **Error state** — Shows error message when API fails
+7. **Conditional rendering** — Elements show/hide based on state
+8. **Form validation** — Invalid input shows error messages
+9. **Navigation** — Links and buttons navigate correctly
+
+### React Test Example Pattern
+
+    import { render, screen, waitFor } from '@testing-library/react';
+    import userEvent from '@testing-library/user-event';
+    import { ProductList } from './ProductList';
+    import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+    // Mock the API hook
+    vi.mock('../hooks/useProducts', () => ({
+      useProducts: vi.fn(),
+    }));
+
+    import { useProducts } from '../hooks/useProducts';
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    const renderWithProviders = (ui: React.ReactElement) =>
+      render(
+        <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+      );
+
+    describe('ProductList', () => {
+      beforeEach(() => {
+        vi.clearAllMocks();
+      });
+
+      it('should render loading state initially', () => {
+        (useProducts as ReturnType<typeof vi.fn>).mockReturnValue({
+          data: undefined,
+          isLoading: true,
+          error: null,
+        });
+
+        renderWithProviders(<ProductList />);
+
+        expect(screen.getByRole('progressbar')).toBeInTheDocument();
+      });
+
+      it('should render products when data is loaded', () => {
+        (useProducts as ReturnType<typeof vi.fn>).mockReturnValue({
+          data: [
+            { id: '1', name: 'Widget', price: 9.99 },
+            { id: '2', name: 'Gadget', price: 19.99 },
+          ],
+          isLoading: false,
+          error: null,
+        });
+
+        renderWithProviders(<ProductList />);
+
+        expect(screen.getByText('Widget')).toBeInTheDocument();
+        expect(screen.getByText('Gadget')).toBeInTheDocument();
+      });
+
+      it('should show empty state when no products exist', () => {
+        (useProducts as ReturnType<typeof vi.fn>).mockReturnValue({
+          data: [],
+          isLoading: false,
+          error: null,
+        });
+
+        renderWithProviders(<ProductList />);
+
+        expect(screen.getByText(/no products found/i)).toBeInTheDocument();
+      });
+
+      it('should show error message when API fails', () => {
+        (useProducts as ReturnType<typeof vi.fn>).mockReturnValue({
+          data: undefined,
+          isLoading: false,
+          error: new Error('Failed to fetch'),
+        });
+
+        renderWithProviders(<ProductList />);
+
+        expect(screen.getByRole('alert')).toBeInTheDocument();
+      });
+
+      it('should navigate to product detail on row click', async () => {
+        const user = userEvent.setup();
+
+        (useProducts as ReturnType<typeof vi.fn>).mockReturnValue({
+          data: [{ id: '1', name: 'Widget', price: 9.99 }],
+          isLoading: false,
+          error: null,
+        });
+
+        renderWithProviders(<ProductList />);
+
+        await user.click(screen.getByText('Widget'));
+
+        // Assert navigation occurred
+      });
+    });
+
+### Angular Test Example Pattern
+
+    import { ComponentFixture, TestBed } from '@angular/core/testing';
+    import { provideHttpClientTesting } from '@angular/common/http/testing';
+    import { ProductListComponent } from './product-list.component';
+    import { ProductService } from '../../services/product.service';
+    import { of, throwError } from 'rxjs';
+    import { signal } from '@angular/core';
+
+    describe('ProductListComponent', () => {
+      let component: ProductListComponent;
+      let fixture: ComponentFixture<ProductListComponent>;
+      let productService: jasmine.SpyObj<ProductService>;
+
+      beforeEach(async () => {
+        const spy = jasmine.createSpyObj('ProductService', ['getAll']);
+
+        await TestBed.configureTestingModule({
+          imports: [ProductListComponent],
+          providers: [
+            { provide: ProductService, useValue: spy },
+            provideHttpClientTesting(),
+          ],
+        }).compileComponents();
+
+        productService = TestBed.inject(ProductService) as jasmine.SpyObj<ProductService>;
+        fixture = TestBed.createComponent(ProductListComponent);
+        component = fixture.componentInstance;
+      });
+
+      it('should create', () => {
+        expect(component).toBeTruthy();
+      });
+
+      it('should display products when loaded', () => {
+        productService.getAll.and.returnValue(of([
+          { id: '1', name: 'Widget', price: 9.99 },
+        ]));
+
+        fixture.detectChanges();
+
+        const compiled = fixture.nativeElement as HTMLElement;
+        expect(compiled.querySelector('.product-name')?.textContent)
+          .toContain('Widget');
+      });
+
+      it('should show empty state when no products', () => {
+        productService.getAll.and.returnValue(of([]));
+
+        fixture.detectChanges();
+
+        const compiled = fixture.nativeElement as HTMLElement;
+        expect(compiled.querySelector('.empty-state')).toBeTruthy();
+      });
+
+      it('should show error when service fails', () => {
+        productService.getAll.and.returnValue(
+          throwError(() => new Error('API error'))
+        );
+
+        fixture.detectChanges();
+
+        const compiled = fixture.nativeElement as HTMLElement;
+        expect(compiled.querySelector('[role="alert"]')).toBeTruthy();
+      });
+    });
+
+## Step 3 — Integration Tests (When Requested)
+
+If the developer asks for integration tests, generate tests using WebApplicationFactory
+and Testcontainers.
+
+### Integration Test Rules
+
+- Use `WebApplicationFactory<Program>` to spin up the API in-memory
+- Use **Testcontainers** for real database testing (PostgreSQL or SQL Server)
+- NEVER mock the database in integration tests — use a real containerized instance
+- Test the full HTTP request/response cycle
+- Include authentication setup using test tokens
+
+### Integration Test Example Pattern
+
+    using Microsoft.AspNetCore.Mvc.Testing;
+    using System.Net;
+    using System.Net.Http.Json;
+    using Testcontainers.PostgreSql;
+
+    namespace MyApp.Tests.Integration.Api;
+
+    public sealed class ProductApiTests : IClassFixture<CustomWebApplicationFactory>, IAsyncLifetime
+    {
+        private readonly HttpClient _client;
+        private readonly CustomWebApplicationFactory _factory;
+
+        public ProductApiTests(CustomWebApplicationFactory factory)
+        {
+            _factory = factory;
+            _client = factory.CreateClient();
+        }
+
+        public Task InitializeAsync() => Task.CompletedTask;
+        public Task DisposeAsync() => Task.CompletedTask;
+
+        [Fact]
+        public async Task GetProducts_Should_Return200_With_EmptyList()
+        {
+            // Act
+            var response = await _client.GetAsync("/api/v1/products");
+
+            // Assert
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            var products = await response.Content.ReadFromJsonAsync<List<ProductResponse>>();
+            Assert.NotNull(products);
+            Assert.Empty(products);
+        }
+
+        [Fact]
+        public async Task CreateProduct_Should_Return201_When_Valid()
+        {
+            // Arrange
+            var request = new CreateProductRequest
+            {
+                Name = "Integration Test Widget",
+                Price = 29.99m
+            };
+
+            // Act
+            var response = await _client.PostAsJsonAsync("/api/v1/products", request);
+
+            // Assert
+            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+            var created = await response.Content.ReadFromJsonAsync<ProductResponse>();
+            Assert.NotNull(created);
+            Assert.Equal(request.Name, created.Name);
+            Assert.NotEqual(Guid.Empty, created.Id);
+        }
+
+        [Fact]
+        public async Task CreateProduct_Should_Return400_When_NameIsEmpty()
+        {
+            // Arrange
+            var request = new CreateProductRequest { Name = "", Price = 0 };
+
+            // Act
+            var response = await _client.PostAsJsonAsync("/api/v1/products", request);
+
+            // Assert
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+
+        [Fact]
+        public async Task GetProduct_Should_Return404_When_NotFound()
+        {
+            // Act
+            var response = await _client.GetAsync($"/api/v1/products/{Guid.NewGuid()}");
+
+            // Assert
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        }
+    }
+
+## Step 4 — Verify Test Coverage
+
+After generating tests, remind the developer to check coverage:
+
+### Backend Coverage
+
+    dotnet test --collect:"XPlat Code Coverage"
+    reportgenerator -reports:**/coverage.cobertura.xml -targetdir:coverage-report
+
+Coverage targets per constitution:
+
+- Business logic / Application layer: minimum 80%
+- Controllers / Endpoints: integration tests cover these
+- Domain entities: covered if they contain behavior
+
+### Frontend Coverage
+
+    # Jest
+    npx jest --coverage
+
+    # Vitest
+    npx vitest run --coverage
+
+Coverage targets per constitution:
+
+- Components with business logic: minimum 70%
+- Utility functions: minimum 80%
+- API service layers: minimum 80%
+
+## Reminders
+
+- Test names MUST be descriptive — someone reading only the test name should understand what is being verified
+- Each test MUST test ONE behavior — no multi-assertion tests that test unrelated things
+- Tests MUST be independent — no test should depend on another test running first
+- Tests MUST be deterministic — no random values, timestamps, or external dependencies
+- Use [Theory] with [InlineData] for parameterized tests when testing multiple inputs
+- Use [Fact] for single-scenario tests
+- Mock external dependencies, not internal logic
+- Prefer testing behavior over implementation details
+- For frontend: test what the user sees, not component internals
+- Run the full test suite before committing to ensure no regressions
+- Keep test files organized matching the source code folder structure
