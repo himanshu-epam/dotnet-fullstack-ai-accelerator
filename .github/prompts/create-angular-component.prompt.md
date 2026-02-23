@@ -1,5 +1,5 @@
 ---
-mode: agent
+agent: agent
 description: "Scaffold an Angular standalone component with service, model, routing, and tests"
 ---
 

@@ -179,5 +179,5 @@ Focus on the business value, not technical implementation.]
 
 ---
 
-_Spec created: [DATE]_
-_Last updated: [DATE]_
+_Plan created: [20-02-2026]_
+_Last updated: [20-02-2026]_

@@ -1,5 +1,5 @@
 ---
-mode: agent
+agent: agent
 description: "Configure Scalar API reference with OAuth2 authentication replacing Swagger UI"
 ---
 
